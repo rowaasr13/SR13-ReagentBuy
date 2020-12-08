@@ -1,0 +1,7 @@
+## Interface: 90002
+## Title: SR13-ReagentBuy
+## Author: Rowaa[SR13]
+## Version: 0.1
+## OptionalDeps:
+Slash.lua
+SR13-ReagentBuy.lua
