@@ -1,8 +1,23 @@
 local a_name, a_env = ...
 
--- BlizzardInterfaceCode\AddOns\Blizzard_TradeSkillUI\Blizzard_TradeSkillDetails.lua
--- /dump TradeSkillFrame.RecipeList.selectedRecipeID
--- /dump TradeSkillFrame.DetailsFrame.CreateMultipleInputBox:GetValue()
+local itemid_to_merchant_idx = {}
+local function ScanMerchant()
+   wipe(itemid_to_merchant_idx)
+   for merchant_idx = 1, GetMerchantNumItems() do repeat -- break now goes to next iteration
+      local link = GetMerchantItemLink(merchant_idx)
+      local item_id = link and link:match("|Hitem:(%d+)")
+      if not item_id then break end -- continue to next item
+      item_id = item_id + 0
+
+      local name, texture, price, quantity, numAvailable, isPurchasable, isUsable, extendedCost = GetMerchantItemInfo(merchant_idx)
+      if not isPurchasable then break end
+      if extendedCost then break end
+      if numAvailable == 0 then break end -- -1 == unlimited
+
+      itemid_to_merchant_idx[item_id] = merchant_idx
+    until true end
+end
+
 
 local need = {}
 
