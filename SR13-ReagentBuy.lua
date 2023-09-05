@@ -18,6 +18,44 @@ local function ScanMerchant()
     until true end
 end
 
+-- Scans currently opened recipe and intersect with merchant items
+-- Sets table. Intersected item_ids as keys and amount required for ONE craft as values.
+-- Interface\AddOns\Blizzard_Professions\Blizzard_ProfessionsCrafting.lua
+-- /dump ProfessionsFrame.CraftingPage.SchematicForm.recipeSchematic -- does not include info on currently selected quality of reagents?
+-- /dump ProfessionsFrame.CraftingPage.SchematicForm.recipeSchematic.reagentSlotSchematics
+local intersected_recipe_merchant_quantity_required = {}
+local function ScanCurrentRecipe(itemid_to_merchant_idx)
+   wipe(intersected_recipe_merchant_quantity_required)
+   if not ProfessionsFrame then return end
+   if not ProfessionsFrame.CraftingPage then return end
+   if not ProfessionsFrame.CraftingPage.SchematicForm then return end
+
+   local recipe_schematic = ProfessionsFrame.CraftingPage.SchematicForm.recipeSchematic
+   if not recipe_schematic then return end
+
+   local reagent_slots = recipe_schematic.reagentSlotSchematics
+   if not reagent_slots then return end
+
+   for slot_idx = 1, #reagent_slots do repeat -- break now goes to next iteration
+      local slot_data = reagent_slots[slot_idx]
+      if not slot_data.required then break end
+      if not slot_data.reagents then return end
+      assert(#slot_data.reagents == 1, "can't work with more than ONE reagent per slot yet")
+
+      local item_id = slot_data.reagents[1].itemID
+
+      if not itemid_to_merchant_idx[item_id] then break end
+
+      intersected_recipe_merchant_quantity_required[item_id] = slot_data.quantityRequired
+   until true end
+end
+
+-- /run _G['SR13-ReagentBuy'].debug.TEST_SCAN()
+_G[a_name].debug.TEST_SCAN = function()
+   ScanMerchant()
+   ScanCurrentRecipe(itemid_to_merchant_idx)
+   DevTools_Dump(intersected_recipe_merchant_quantity_required)
+end
 
 local need = {}
 
