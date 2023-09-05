@@ -1,8 +1,12 @@
 local a_name, a_env = ...
+_G[a_name] = {}
+_G[a_name].debug = {}
 
 local itemid_to_merchant_idx = {}
 local function ScanMerchant()
    wipe(itemid_to_merchant_idx)
+   local num_merchant_items = GetMerchantNumItems()
+   if (not num_merchant_items) or (num_merchant_items < 1) then return nil, "no merchant" end
    for merchant_idx = 1, GetMerchantNumItems() do repeat -- break now goes to next iteration
       local link = GetMerchantItemLink(merchant_idx)
       local item_id = link and link:match("|Hitem:(%d+)")
@@ -15,7 +19,7 @@ local function ScanMerchant()
       if numAvailable == 0 then break end -- -1 == unlimited
 
       itemid_to_merchant_idx[item_id] = merchant_idx
-    until true end
+   until true end
 end
 
 -- Scans currently opened recipe and intersect with merchant items
@@ -58,37 +62,30 @@ _G[a_name].debug.TEST_SCAN = function()
 end
 
 local need = {}
+local total_cost
+local CONTINUE_UNIQ_TOKEN = {}
+local function BuyReagentsForSelectedRecipe(cmd, edit_box, continue_buying)
+   if continue_buying == CONTINUE_UNIQ_TOKEN then --[[]] else total_cost = 0 end
+   ScanMerchant()
+   ScanCurrentRecipe(itemid_to_merchant_idx)
 
-local function BuyReagentsForSelectedRecipe(cmd)
-   if not TradeSkillFrame then return end
-   local selectedRecipeID = TradeSkillFrame.RecipeList.selectedRecipeID
-   if not selectedRecipeID then return end
+   if not pairs(intersected_recipe_merchant_quantity_required) then return end
 
-   local recipeInfo = C_TradeSkillUI.GetRecipeInfo(selectedRecipeID)
-   if not recipeInfo then return end
-   if not recipeInfo.learned then return end
+   local mult = tonumber(cmd)
 
    wipe(need)
 
-   local mult = tonumber(cmd) or TradeSkillFrame.DetailsFrame.CreateMultipleInputBox:GetValue() + 0
-   print("Buying reagents to craft " .. mult)
+   print("Buying reagents to craft " .. ProfessionsFrame.CraftingPage.SchematicForm.recipeSchematic.name .. ' * ' .. mult)
 
-   local numReagents = C_TradeSkillUI.GetRecipeNumReagents(selectedRecipeID)
-   for reagentIndex = 1, numReagents do
-      local reagentName, reagentTexture, reagentCount, playerReagentCount = C_TradeSkillUI.GetRecipeReagentInfo(selectedRecipeID, reagentIndex)
-      local link = C_TradeSkillUI.GetRecipeReagentItemLink(selectedRecipeID, reagentIndex)
-      local missing = playerReagentCount - (reagentCount * mult)
-      if missing < 0 then
-         local item_id = link:match("|Hitem:(%d+)")
-         if item_id then
-            need[item_id + 0] = -missing
-         end
+   for item_id, required_count in pairs(intersected_recipe_merchant_quantity_required) do
+      local player_count = ItemUtil.GetCraftingReagentCount(item_id)
+      local missing_count = player_count - (required_count * mult)
+      if missing_count < 0 then
+         need[item_id] = -missing_count
       end
    end
-   DevTools_Dump(need)
 
    local buy_more_stacks
-   local cost = 0
    for merchant_idx = 1, GetMerchantNumItems() do
       local link = GetMerchantItemLink(merchant_idx)
       local item_id = link and link:match("|Hitem:(%d+)")
@@ -97,7 +94,7 @@ local function BuyReagentsForSelectedRecipe(cmd)
          local buy_amount = need[item_id]
          if buy_amount then
             local name, texture, price, quantity, numAvailable, isPurchasable, isUsable, extendedCost = GetMerchantItemInfo(merchant_idx)
-            print(name, extendedCost)
+            -- print(name, extendedCost)
             local maxStack = GetMerchantItemMaxStack(merchant_idx)
             if buy_amount > maxStack then
                buy_amount = maxStack
@@ -105,19 +102,20 @@ local function BuyReagentsForSelectedRecipe(cmd)
             end
             -- TODO: numAvailable, maxStack, extendedCost
             if not extendedCost or extendedCost == 0 then
-               cost = cost + (price / quantity) * buy_amount
-               print("BuyMerchantItem", merchant_idx, buy_amount)
+               total_cost = total_cost + (price / quantity) * buy_amount
+               print(name .. " x" .. buy_amount .. ": BuyMerchantItem", merchant_idx, buy_amount)
                BuyMerchantItem(merchant_idx, buy_amount)
             end
          end
       end
    end
-   print(cost)
+   print("Expected total cost: " .. GetMoneyString(total_cost))
 
    if buy_more_stacks then
-      C_Timer.After(0.2, function() return BuyReagentsForSelectedRecipe(cmd) end)
+      C_Timer.After(0.2, function() return BuyReagentsForSelectedRecipe(cmd, edit_box, CONTINUE_UNIQ_TOKEN) end)
    end
 end
+
 _G.BuyReagentsForSelectedRecipe = BuyReagentsForSelectedRecipe
-a_env.register_slash("BuyReagents", { "/breg" }, BuyReagentsForSelectedRecipe)
+a_env.register_slash("BuyReagents", { "/regbuy", "/buyreg" }, BuyReagentsForSelectedRecipe)
 a_env.register_slash = nil
